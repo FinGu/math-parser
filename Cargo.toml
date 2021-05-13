@@ -1,0 +1,16 @@
+[package]
+name = "math-parser"
+version = "0.1.0"
+authors = ["fingu"]
+edition = "2018"
+
+[lib]
+name = "mp"
+path = "src/lib.rs"
+
+[[bin]]
+name="mp"
+path = "src/bin.rs"
+
+
+[dependencies]
