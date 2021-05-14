@@ -7,7 +7,7 @@ pub mod math_parser {
 
     type deque<T> = std::collections::VecDeque<T>;
 
-    type math_parser_result<T> = Result<T, math_parser_errors>;
+    pub type math_parser_result<T> = Result<T, math_parser_errors>;
 
     #[derive(Debug, Clone, Copy)]
     pub enum math_parser_errors {
@@ -18,7 +18,9 @@ pub mod math_parser {
 
     impl std::fmt::Display for math_parser_errors {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{}",
+            write!(
+                f,
+                "{}",
                 match self {
                     invalid_notation => "Invalid notation",
                     mismatched_parenthesis => "Mismatched parenthesis",
@@ -120,9 +122,11 @@ pub mod math_parser {
 
             let outqueue = &mut self.output_queue;
 
-            if token.is_digit(10) { // is base-10 number
+            if token.is_digit(BASE) {
+                // is base-10 number
                 outqueue.push_back(token);
-            } else if let Some(operator) = math_operator::new(token) { // is valid operator ( functions not implemented )
+            } else if let Some(operator) = math_operator::new(token) {
+                // is valid operator ( functions not implemented )
                 // https://github.com/rust-lang/rust/issues/53667
                 while matches!(opstack.last(), Some(last_operator) if
                     ((last_operator.precedence == operator.precedence && operator.associativity == assoc::left)
@@ -148,7 +152,8 @@ pub mod math_parser {
                     outqueue.push_back(opstack.pop().unwrap().operator);
                 }
 
-                if operator.is_real_op() { // LP is always removed, but the extra space isnt
+                if operator.is_real_op() {
+                    // LP is always removed, but the extra space isnt
                     outqueue.push_back(SPACE);
                 }
 
@@ -172,7 +177,8 @@ pub mod math_parser {
             while !self.operator_stack.is_empty() {
                 let popd = self.operator_stack.pop().unwrap().operator;
 
-                if popd == LP { //RPs arent pushed so it doesnt make sense to check them
+                if popd == LP {
+                    //RPs arent pushed so it doesnt make sense to check them
                     return Err(mismatched_parenthesis);
                 }
 
@@ -185,9 +191,11 @@ pub mod math_parser {
         }
 
         pub fn parse(&mut self) -> math_parser_result<String> {
-            let mut char_stack: stack<char> = self.input_str.trim().chars().collect(); //removing spaces for the unary_handle function
+            let char_str: String = self.input_str.split_whitespace().collect(); //removing spaces for the unary_handle function
 
-            char_stack = self.unary_handle(char_stack)?;
+            let mut char_stack = char_str.chars().collect();
+
+            self.unary_handle(&mut char_stack)?;
 
             char_stack.into_iter().for_each(|c| self.handle_token(c));
 
@@ -199,40 +207,37 @@ pub mod math_parser {
         fn to_string(&self, outqueue: &deque<char>) -> math_parser_result<String> {
             let outstr: String = outqueue.iter().collect();
 
-            if outstr.contains("  ") { // notation is invalid in case of two spaces
+            if outstr.contains("  ") {
+                // notation is invalid in case of two spaces
                 return Err(invalid_notation);
             }
 
             Ok(outstr)
         }
 
-        fn unary_handle(&self, chrs: stack<char>) -> math_parser_result<stack<char>> {
-            //needs refactoring
-            let mut out = chrs.clone();
-            let len = out.len();
+        fn unary_handle(&self, chrs: &mut stack<char>) -> math_parser_result<()> {
+            for i in 0..chrs.len() {
+                let (left, right) = chrs.split_at_mut(i);
+                //splits the array [1,+,1] (i = 1) => ([1], [+,1])
 
-            for (i, c) in out.iter_mut().enumerate() {
-                let nxt = i + 1;
-                let bhd = if i == 0 { i } else { i - 1 }; // must verify the first char
+                let token = *right.first().unwrap(); //chrs[i]
 
-                if nxt >= len { // the last index doesnt need to be checked
-                    break;
-                }
-
-                if matches!(math_operator::new(*c), Some(as_op) if
-                    as_op.is_real_op() &&
-                    chrs[nxt].is_digit(BASE) && // (2+1)-(2+1), if the next char isnt a digit, it doesnt make sense
-                    chrs[bhd] != ')' && // (2+1)-4, the minus in this case would be considered unary without this check
-                    !chrs[bhd].is_digit(BASE) // behind must not be a digit, 2+1-4, or else an operation would be turned to unary
-                ) {
-                    *c = match c {
+                if matches!(math_operator::new(token), Some(tok_as_op) if tok_as_op.is_real_op()) &&
+                    matches!(right.get(1), Some(nxt) if nxt.is_digit(BASE)) && // (2+1)-(2+1), if the next char isnt a digit, it doesnt make sense, PS : 0 is i, so 1 is i+1
+                    matches!(if i == 0 { right.first() } else { left.last() }, Some(bhd) // the entire check is ignored in case i is 0
+                    if *bhd != ')' // (2+1)-4, the minus in this case would be considered unary without this check
+                    && !bhd.is_digit(BASE))
+                // 2+1-4, behind must not be a digit, or else an operation would be turned to unary
+                {
+                    *right.first_mut().unwrap() = match token {
+                        //mut chrs[i]
                         '-' => 'm',
                         '+' => 'p',
                         _ => return Err(invalid_notation),
                     }
                 }
             }
-            Ok(out)
+            Ok(())
         }
     }
 

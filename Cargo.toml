@@ -1,16 +1,16 @@
 [package]
 name = "math-parser"
-version = "0.1.0"
-authors = ["fingu"]
+version = "0.2.0"
+authors = ["FinGu"]
 edition = "2018"
 
 [lib]
 name = "mp"
 path = "src/lib.rs"
 
-[[bin]]
-name="mp"
-path = "src/bin.rs"
+[[example]]
+name="clicalc"
+path = "examples/clicalc.rs"
 
-
-[dependencies]
+[dev-dependencies]
+clap = "2.33.3"

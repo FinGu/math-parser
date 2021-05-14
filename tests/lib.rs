@@ -28,7 +28,7 @@ pub mod tests {
     fn infix_to_postfix_failed2() {
         infix_to_postfix::new("(5 + 5").parse().unwrap();
     }
-    
+
     #[test]
     fn postfix_to_result_valid1() {
         let t = postfix_to_result::new("8 21 * 89 14 / + 2 ^")
@@ -40,25 +40,19 @@ pub mod tests {
 
     #[test]
     fn postfix_to_result_valid2() {
-        let t = postfix_to_result::new("50 45 m *")
-            .parse(false)
-            .unwrap();
+        let t = postfix_to_result::new("50 45 m *").parse(false).unwrap();
 
         assert_eq!(t, "-2250");
     }
     #[test]
     #[should_panic]
     fn postfix_to_result_failed1() {
-        postfix_to_result::new("50 45 + -")
-        .parse(false)
-        .unwrap();
+        postfix_to_result::new("50 45 + -").parse(false).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn postfix_to_result_failed2() {
-        postfix_to_result::new("+")
-        .parse(false)
-        .unwrap();
+        postfix_to_result::new("+").parse(false).unwrap();
     }
 }
