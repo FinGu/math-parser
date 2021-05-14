@@ -12,7 +12,7 @@ pub mod tests {
 
     #[test]
     fn infix_to_postfix_valid2() {
-        let t = infix_to_postfix::new("50 * (-45)").parse().unwrap();
+        let t = infix_to_postfix::new("50 * -45").parse().unwrap();
 
         assert_eq!(t, "50 45 m *");
     }
@@ -28,15 +28,7 @@ pub mod tests {
     fn infix_to_postfix_failed2() {
         infix_to_postfix::new("(5 + 5").parse().unwrap();
     }
-
-    #[test]
-    #[should_panic]
-    fn infix_to_postfix_failed3(){
-        infix_to_postfix::new("20 / -2") // in this case, check 'infix_to_postfix_valid2'
-            .parse()
-            .unwrap();
-    }
-
+    
     #[test]
     fn postfix_to_result_valid1() {
         let t = postfix_to_result::new("8 21 * 89 14 / + 2 ^")

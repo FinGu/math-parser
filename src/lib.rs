@@ -127,7 +127,7 @@ pub mod math_parser {
                 while matches!(opstack.last(), Some(last_operator) if
                     ((last_operator.precedence == operator.precedence && operator.associativity == assoc::left)
                     || (last_operator.precedence > operator.precedence)) // if LP was allowed, this would always be true
-                    && operator.operator != LP
+                    && operator.is_real_op()
                 ) {
                     /*
                     input => (1+1)*2^1
@@ -185,7 +185,7 @@ pub mod math_parser {
         }
 
         pub fn parse(&mut self) -> math_parser_result<String> {
-            let mut char_stack: stack<char> = self.input_str.chars().collect();
+            let mut char_stack: stack<char> = self.input_str.trim().chars().collect(); //removing spaces for the unary_handle function
 
             char_stack = self.unary_handle(char_stack)?;
 
@@ -215,7 +215,7 @@ pub mod math_parser {
                 let nxt = i + 1;
                 let bhd = if i == 0 { i } else { i - 1 }; // must verify the first char
 
-                if nxt >= len {
+                if nxt >= len { // the last index doesnt need to be checked
                     break;
                 }
 
