@@ -90,28 +90,33 @@ pub mod math_parser {
     pub struct math_parser;
 
     impl math_parser {
-        pub fn parse(notation: &str, dbg: bool) -> math_parser_result<f32> {
+        pub fn parse(notation: &str) -> math_parser_result<(f32, stack<String>)> {
             let itop = infix_to_postfix::new(notation).parse()?;
 
-            let ptor = postfix_to_result::new(&itop).parse(dbg)?;
+            let mut dbg = stack::new();
 
-            Ok(ptor.parse::<f32>().unwrap())
+            let ptor = postfix_to_result::new(&itop).parse(&mut Some(&mut dbg))?;
+
+            match ptor.parse::<f32>() {
+                Ok(out) => Ok((out, dbg)),
+                Err(_) => Err(invalid_notation),
+            }
         }
     }
 
-    pub struct infix_to_postfix {
-        input_str: String,
+    pub struct infix_to_postfix<'a> {
+        input_str: &'a str,
 
         output_queue: deque<char>,
 
         operator_stack: stack<math_operator>,
     }
 
-    //SHUNTING YARD
-    impl infix_to_postfix {
-        pub fn new(input: &str) -> Self {
+    //naive shunting yard
+    impl<'a> infix_to_postfix<'a> {
+        pub fn new(input: &'a str) -> Self {
             Self {
-                input_str: input.to_string(),
+                input_str: input,
                 output_queue: deque::new(),
                 operator_stack: stack::new(),
             }
@@ -241,21 +246,25 @@ pub mod math_parser {
         }
     }
 
-    pub struct postfix_to_result {
-        input_str: String,
+    pub struct postfix_to_result<'a> {
+        input_str: &'a str,
 
         output_stack: stack<String>,
     }
 
-    impl postfix_to_result {
-        pub fn new(input: &str) -> Self {
+    impl<'a> postfix_to_result<'a> {
+        pub fn new(input: &'a str) -> Self {
             Self {
-                input_str: input.to_string(),
+                input_str: input,
                 output_stack: stack::new(),
             }
         }
 
-        fn handle_token(&mut self, token: String, dbg: bool) -> math_parser_result<()> {
+        fn handle_token(
+            &mut self,
+            token: String,
+            dbg: Option<&mut stack<String>>,
+        ) -> math_parser_result<()> {
             let outstack = &mut self.output_stack;
 
             if token.parse::<f32>().is_ok() {
@@ -297,22 +306,26 @@ pub mod math_parser {
                 stack = 1
                 */
 
-                if dbg {
-                    println!("{} {} {} = {}", arg1, operator.operator, arg2, result);
-                } //TODO : return an array with those instead of printing
+                if let Some(dbgstck) = dbg {
+                    dbgstck.push(format!(
+                        "{} {} {} = {}",
+                        arg1, operator.operator, arg2, result
+                    ));
+                }
 
                 outstack.push(result);
             }
             Ok(())
         }
 
-        pub fn parse(&mut self, dbg: bool) -> math_parser_result<String> {
-            let cloned_input = self.input_str.clone();
-
-            let _l = cloned_input.split_whitespace();
+        pub fn parse(
+            &mut self,
+            dbg: &mut Option<&mut stack<String>>,
+        ) -> math_parser_result<String> {
+            let _l = self.input_str.split_whitespace();
 
             for c in _l {
-                self.handle_token(c.to_owned(), dbg)?;
+                self.handle_token(c.to_owned(), dbg.as_deref_mut())?;
             }
 
             Ok(self.output_stack.join(""))

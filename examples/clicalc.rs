@@ -36,13 +36,14 @@ fn main() -> math_parser_result<()> {
     let dbg = matches.is_present("debug");
 
     let parse_pln_panic = |input: Option<String>| -> math_parser_result<()> {
-        println!(
-            "{}",
-            match math_parser::parse(&input.expect("Invalid args"), dbg) {
-                Ok(val) => val,
-                Err(err) => return Err(err),
-            }
-        );
+        let (result, dbgres) = match math_parser::parse(&input.expect("Invalid args")) {
+            Ok(val) => val,
+            Err(err) => return Err(err),
+        };
+
+        dbgres.iter().for_each(|str| println!("{}", str));
+
+        println!("{}", result);
 
         Ok(())
     };
