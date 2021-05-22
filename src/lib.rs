@@ -13,7 +13,7 @@ pub mod math_parser {
     pub enum math_parser_errors {
         mismatched_parenthesis,
         invalid_notation,
-        invalid_op,
+        invalid_function,
     }
 
     impl std::fmt::Display for math_parser_errors {
@@ -22,29 +22,31 @@ pub mod math_parser {
                 f,
                 "{}",
                 match self {
-                    invalid_notation => "Invalid notation",
                     mismatched_parenthesis => "Mismatched parenthesis",
-                    invalid_op => "Invalid operator",
+                    invalid_notation => "Invalid notation",
+                    invalid_function => "Invalid function",
                 }
             )
         }
     }
+
+    type Ftype = f32;
+    const BASE: u32 = 10;
+    const SPACE: char = ' ';
+    const LP: char = '(';
 
     #[derive(PartialEq, PartialOrd)]
     enum assoc {
         right,
         left,
     }
+
     #[derive(PartialEq, PartialOrd)]
     struct math_operator {
         operator: char,
         precedence: i32,
         associativity: assoc,
     }
-
-    const BASE: u32 = 10;
-    const SPACE: char = ' ';
-    const LP: char = '(';
 
     impl math_operator {
         fn new(opchar: char) -> Option<Self> {
@@ -69,7 +71,7 @@ pub mod math_parser {
             })
         }
 
-        fn function(&self, first: f32, second: f32) -> math_parser_result<f32> {
+        fn solve(&self, first: Ftype, second: Ftype) -> math_parser_result<Ftype> {
             Ok(match self.operator {
                 '+' => first + second,
                 '-' => first - second,
@@ -78,56 +80,75 @@ pub mod math_parser {
                 '^' => first.powf(second),
                 'm' => -1.0 * first,
                 'p' => 1.0 * first,
-                _ => return Err(invalid_op),
+                _ => return Err(invalid_notation),
             })
         }
 
         fn is_real_op(&self) -> bool {
-            !matches!(self.operator, LP | 'p' | 'm')
+            matches!(self.operator, '+' | '-' | '*' | '/' | '^')
+        }
+
+        fn is_function(&self) -> bool {
+            match self.operator {
+                'p' | 'm' => false,
+                op => op.is_alphabetic() || op == '!',
+            }
+        }
+    }
+
+    struct math_function<'a>(&'a str, usize);
+
+    impl<'a> math_function<'a> {
+        fn new(inp: &'a str) -> Option<Self> {
+            Some(Self(
+                inp,
+                match inp {
+                    "sin" | "cos" | "tan" => 1,
+                    "log" => 2,
+                    _ => return None,
+                },
+            ))
+        }
+
+        fn solve(&self, first: Ftype, second: Ftype) -> math_parser_result<Ftype> {
+            Ok(match self.0 {
+                "sin" => first.sin(),
+                "cos" => first.cos(),
+                "tan" => first.tan(),
+                "log" => first.log(second),
+                _ => return Err(invalid_function),
+            })
         }
     }
 
     pub struct math_parser;
 
     impl math_parser {
-        pub fn parse(notation: &str) -> math_parser_result<(f32, stack<String>)> {
-            let itop = infix_to_postfix::new(notation).parse()?;
+        pub fn parse(notation: &str) -> math_parser_result<(Ftype, stack<String>)> {
+            let itop = infix_to_postfix.parse(notation)?;
 
             let mut dbg = stack::new();
 
-            let ptor = postfix_to_result::new(&itop).parse(&mut Some(&mut dbg))?;
+            let ptor = postfix_to_result.parse(&itop, &mut Some(&mut dbg))?;
 
-            match ptor.parse::<f32>() {
+            match ptor.parse::<Ftype>() {
                 Ok(out) => Ok((out, dbg)),
                 Err(_) => Err(invalid_notation),
             }
         }
     }
 
-    pub struct infix_to_postfix<'a> {
-        input_str: &'a str,
-
-        output_queue: deque<char>,
-
-        operator_stack: stack<math_operator>,
-    }
+    pub struct infix_to_postfix;
 
     //naive shunting yard
-    impl<'a> infix_to_postfix<'a> {
-        pub fn new(input: &'a str) -> Self {
-            Self {
-                input_str: input,
-                output_queue: deque::new(),
-                operator_stack: stack::new(),
-            }
-        }
-
-        fn handle_token(&mut self, token: char) {
-            let opstack = &mut self.operator_stack;
-
-            let outqueue = &mut self.output_queue;
-
-            if token.is_digit(BASE) {
+    impl infix_to_postfix {
+        fn handle_token(
+            &self,
+            opstack: &mut stack<math_operator>,
+            outqueue: &mut deque<char>,
+            token: char,
+        ) {
+            if token.is_digit(BASE) || token == ',' || token == '.' {
                 // is base-10 number
                 outqueue.push_back(token);
             } else if let Some(operator) = math_operator::new(token) {
@@ -153,8 +174,14 @@ pub mod math_parser {
                     ... (input ended)
                     queue => 1 1 + 2 1 ^ *
                     */
-                    outqueue.push_back(SPACE); // for valid formatting
-                    outqueue.push_back(opstack.pop().unwrap().operator);
+                    let popd = opstack.pop().unwrap();
+
+                    if !popd.is_function() {
+                        //makes sure the popped op isnt part of a function
+                        outqueue.push_back(SPACE);
+                    }
+
+                    outqueue.push_back(popd.operator);
                 }
 
                 if operator.is_real_op() {
@@ -167,46 +194,68 @@ pub mod math_parser {
                 while let Some(last_operator) = opstack.last() {
                     if last_operator.operator == LP {
                         opstack.pop(); //discard all LP
-                        continue;
+                        break;
                     }
 
-                    outqueue.push_back(SPACE);
+                    if !last_operator.is_function() {
+                        // abc cant be turned into a b c
+                        outqueue.push_back(SPACE);
+                    }
+
                     outqueue.push_back(opstack.pop().unwrap().operator); //pop op to queue
                 }
-            } else if token == '.' || token == ',' {
-                outqueue.push_back('.'); //f32 parse cannot handle ,
+            } else if token.is_alphabetic() || token == '!' {
+                //is function
+                opstack.push(math_operator {
+                    operator: token,
+                    precedence: 4,
+                    associativity: assoc::right,
+                });
             }
         }
 
-        fn clean_stack(&mut self) -> math_parser_result<()> {
-            while !self.operator_stack.is_empty() {
-                let popd = self.operator_stack.pop().unwrap().operator;
+        fn clean_stack(
+            &self,
+            opstack: &mut stack<math_operator>,
+            outqueue: &mut deque<char>,
+        ) -> math_parser_result<()> {
+            while !opstack.is_empty() {
+                let popd = opstack.pop().unwrap();
 
-                if popd == LP {
+                if popd.operator == LP {
                     //RPs arent pushed so it doesnt make sense to check them
                     return Err(mismatched_parenthesis);
                 }
 
                 // while there are tokens left, pop the rest of the operators into the queue
 
-                self.output_queue.push_back(SPACE);
-                self.output_queue.push_back(popd);
+                if !popd.is_function() {
+                    outqueue.push_back(SPACE);
+                }
+
+                outqueue.push_back(popd.operator);
             }
             Ok(())
         }
 
-        pub fn parse(&mut self) -> math_parser_result<String> {
-            let char_str: String = self.input_str.split_whitespace().collect(); //removing spaces for the unary_handle function
+        pub fn parse(&self, input_str: &str) -> math_parser_result<String> {
+            let mut operator_stack: stack<math_operator> = stack::new();
+
+            let mut output_queue: deque<char> = deque::new();
+
+            let char_str: String = input_str.split_whitespace().collect(); //removing spaces for the unary_handle function
 
             let mut char_stack = char_str.chars().collect();
 
             self.unary_handle(&mut char_stack)?;
 
-            char_stack.into_iter().for_each(|c| self.handle_token(c));
+            char_stack
+                .into_iter()
+                .for_each(|c| self.handle_token(&mut operator_stack, &mut output_queue, c));
 
-            self.clean_stack()?;
+            self.clean_stack(&mut operator_stack, &mut output_queue)?;
 
-            self.to_string(&self.output_queue)
+            self.to_string(&output_queue)
         }
 
         fn to_string(&self, outqueue: &deque<char>) -> math_parser_result<String> {
@@ -246,65 +295,46 @@ pub mod math_parser {
         }
     }
 
-    pub struct postfix_to_result<'a> {
-        input_str: &'a str,
+    pub struct postfix_to_result;
 
-        output_stack: stack<String>,
-    }
-
-    impl<'a> postfix_to_result<'a> {
-        pub fn new(input: &'a str) -> Self {
-            Self {
-                input_str: input,
-                output_stack: stack::new(),
-            }
-        }
-
+    impl postfix_to_result {
         fn handle_token(
-            &mut self,
+            &self,
+            outstack: &mut stack<String>,
             token: String,
             dbg: Option<&mut stack<String>>,
         ) -> math_parser_result<()> {
-            let outstack = &mut self.output_stack;
-
-            if token.parse::<f32>().is_ok() {
+            if token.parse::<Ftype>().is_ok() || token.contains(',') {
                 outstack.push(token);
             } else if let Some(operator) = math_operator::new(token.chars().next().unwrap()) {
-                let mut arg1 = std::f32::NAN;
+                let mut arg1 = Ftype::NAN;
 
-                let mut pop_num_or = |err| -> math_parser_result<f32> {
-                    if let Some(out) = outstack.pop() {
-                        Ok(out.parse::<f32>().map_err(|_| err)?)
-                    } else {
-                        Err(err)
+                let pop_num_or = |err, stack: &mut stack<String>| -> math_parser_result<Ftype> {
+                    match stack.pop() {
+                        Some(out) => Ok(out.parse::<Ftype>().map_err(|_| err)?),
+                        None => Err(err),
                     }
-                }; //pops val and convert to f32 or returns err
+                }; //pops val and convert to Ftype or returns err
 
-                let arg2 = pop_num_or(invalid_notation)?;
+                let arg2 = pop_num_or(invalid_notation, outstack)?;
 
                 let result = if operator.is_real_op() {
-                    // real ops need another arg
-                    arg1 = pop_num_or(invalid_notation)?;
+                    arg1 = pop_num_or(invalid_notation, outstack)?;
+                    // 1 2
+                    // is op +
 
-                    operator.function(arg1, arg2)
+                    // arg2 = pop(2)
+                    // 1
+
+                    //arg1 = pop(1)
+
+                    operator.solve(arg1, arg2)
                 } else {
-                    //unary ops dont need a sec arg, arg1 is NaN
-                    operator.function(arg2, arg1)
+                    //unary handler
+                    operator.solve(arg2, arg1)
                 }
                 .map_err(|e| e)?
                 .to_string();
-
-                /*
-                input => 3 2 -
-                ...
-                input = -
-                stack => 3 2
-                ...
-                (pop1 = 2, pop2 = 3) (order changed due to it being a stack)
-                (first = pop2, second = pop1)
-                ...
-                stack = 1
-                */
 
                 if let Some(dbgstck) = dbg {
                     dbgstck.push(format!(
@@ -315,20 +345,102 @@ pub mod math_parser {
 
                 outstack.push(result);
             }
+
+            Ok(())
+        }
+
+        fn handle_function(
+            &self,
+            outstack: &mut stack<String>,
+            token: String,
+            dbg: Option<&mut stack<String>>,
+        ) -> math_parser_result<()> {
+            outstack.push(" ".to_owned()); //pushes a &str space to separate args
+
+            if !token.contains('!') || token.ends_with('!') {
+                outstack.push(token);
+                return Ok(());
+            }
+
+            fn next_or<'a>(
+                err: math_parser_errors,
+                iter: &mut dyn Iterator<Item = &'a str>,
+            ) -> math_parser_result<&'a str> {
+                match iter.next() {
+                    Some(out) => Ok(out),
+                    None => Err(err),
+                } //gets next val or returns err
+            }
+
+            let as_ftype_or = |err, item: &str| -> math_parser_result<Ftype> {
+                Ok(item.parse::<Ftype>().map_err(|_| err)?)
+            }; // parses to ftype
+
+            //ex input : 10,10!gol
+            //func input : 10,10
+            //func : log!
+
+            let func_name: String = token
+                .chars()
+                .rev()
+                .take_while(|x| x.is_alphabetic())
+                .collect(); //gets 'log'
+
+            let func = match math_function::new(&func_name) {
+                Some(func) => func,
+                None => return Err(invalid_function),
+            }; // the math func ( log )
+
+            let func_args = next_or(invalid_function, &mut token.split("!"))?; //the args ( 10,10 )
+
+            let mut func_args = func_args.split(","); //[10, 10]
+
+            let arg1 = as_ftype_or(invalid_notation, next_or(invalid_function, &mut func_args)?)?;
+
+            let arg2 = if func.1 == 2 {
+                //if is 2 arg func
+                as_ftype_or(invalid_notation, next_or(invalid_function, &mut func_args)?)?
+            } else {
+                Ftype::NAN
+            };
+
+            let result = func.solve(arg1, arg2).map_err(|e| e)?.to_string();
+
+            if let Some(dbgstck) = dbg {
+                dbgstck.push(format!("{} {} {} = {}", func.0, arg1, arg2, result));
+            }
+
+            outstack.push(result);
+
             Ok(())
         }
 
         pub fn parse(
-            &mut self,
+            &self,
+            input_str: &str,
             dbg: &mut Option<&mut stack<String>>,
         ) -> math_parser_result<String> {
-            let _l = self.input_str.split_whitespace();
+            let mut output_stack: stack<String> = stack::new();
 
-            for c in _l {
-                self.handle_token(c.to_owned(), dbg.as_deref_mut())?;
-            }
+            input_str
+                .split_whitespace() //split with whitespaces
+                .map(
+                    |str| {
+                        self.handle_function(&mut output_stack, str.to_owned(), dbg.as_deref_mut())
+                    }, //handles func tokens
+                )
+                .collect::<math_parser_result<()>>()?; //fail with collect
 
-            Ok(self.output_stack.join(""))
+            let input_str = output_stack.into_iter().collect::<String>();
+
+            output_stack = stack::new(); //new opstack for token handling
+
+            input_str
+                .split_whitespace()
+                .map(|str| self.handle_token(&mut output_stack, str.to_owned(), dbg.as_deref_mut()))
+                .collect::<math_parser_result<()>>()?;
+
+            Ok(output_stack.join("")) //stack<String> to String
         }
     }
 }

@@ -1,6 +1,6 @@
 use mp::math_parser::*;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
 use std::io::{self, BufRead};
 
@@ -8,7 +8,7 @@ use std::fs;
 
 fn main() -> math_parser_result<()> {
     let matches = App::new("cli-calculator")
-        .version("0.2.0")
+        .version(crate_version!())
         .author("FinGu")
         .about("cli for the math parser")
         .arg(
