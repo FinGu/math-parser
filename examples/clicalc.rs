@@ -41,7 +41,9 @@ fn main() -> math_parser_result<()> {
             Err(err) => return Err(err),
         };
 
-        dbgres.iter().for_each(|str| println!("{}", str));
+        if dbg {
+            dbgres.iter().for_each(|str| println!("{}", str));
+        }
 
         println!("{}", result);
 
