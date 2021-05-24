@@ -53,11 +53,11 @@ pub mod math_parser {
             let (preced, assoc) = match opchar {
                 '+' | '-' => (2, assoc::left),
 
-                'p' | 'm' => (2, assoc::right), // unary ( m = minus, p = plus)
-
                 '*' | '/' => (3, assoc::left),
 
                 '^' => (4, assoc::right),
+
+                'p' | 'm' => (5, assoc::left), // unary ( m = minus, p = plus )
 
                 LP => (-1, assoc::left), // extra
 
