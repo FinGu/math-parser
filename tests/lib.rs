@@ -59,14 +59,14 @@ pub mod tests {
 
     #[test]
     fn math_parser_valid1() {
-        let t = math_parser::parse("log!10,10 + sin!1").unwrap();
+        let t = parse("log!10,10 + sin!1").unwrap();
 
         assert_eq!(t.0, 1.841471);
     }
 
     #[test]
     fn math_parser_valid2() {
-        let t = math_parser::parse("((2048 / 4) - 12) * log!100,10").unwrap(); //log of 100 on base 10
+        let t = parse("((2048 / 4) - 12) * log!100,10").unwrap(); //log of 100 on base 10
 
         assert_eq!(t.0, 1000.0);
     }
@@ -74,12 +74,12 @@ pub mod tests {
     #[test]
     #[should_panic]
     fn math_parser_failed1() {
-        math_parser::parse("log!-10,10 / 1").unwrap(); // no support for negative args in functions
+        parse("log!-10,10 / 1").unwrap(); // no support for negative args in functions
     }
 
     #[test]
     #[should_panic]
     fn math_parser_failed2() {
-        math_parser::parse("928 / 2 +* 4").unwrap();
+        parse("928 / 2 +* 4").unwrap();
     }
 }

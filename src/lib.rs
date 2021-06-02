@@ -1,22 +1,22 @@
 #[allow(dead_code)]
 #[allow(non_camel_case_types)]
 pub mod math_parser {
-    use math_parser_errors::*;
+    use errors::*;
 
     type stack<T> = Vec<T>;
 
     type deque<T> = std::collections::VecDeque<T>;
 
-    pub type math_parser_result<T> = Result<T, math_parser_errors>;
+    pub type result<T> = Result<T, errors>;
 
     #[derive(Debug, Clone, Copy)]
-    pub enum math_parser_errors {
+    pub enum errors {
         mismatched_parenthesis,
         invalid_notation,
         invalid_function,
     }
 
-    impl std::fmt::Display for math_parser_errors {
+    impl std::fmt::Display for errors {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(
                 f,
@@ -42,13 +42,13 @@ pub mod math_parser {
     }
 
     #[derive(PartialEq, PartialOrd)]
-    struct math_operator {
+    struct operator {
         operator: char,
         precedence: i32,
         associativity: assoc,
     }
 
-    impl math_operator {
+    impl operator {
         fn new(opchar: char) -> Option<Self> {
             let (preced, assoc) = match opchar {
                 '+' | '-' => (2, assoc::left),
@@ -64,14 +64,14 @@ pub mod math_parser {
                 _ => return None,
             };
 
-            Some(math_operator {
+            Some(operator {
                 operator: opchar,
                 precedence: preced,
                 associativity: assoc,
             })
         }
 
-        fn solve(&self, first: Ftype, second: Ftype) -> math_parser_result<Ftype> {
+        fn solve(&self, first: Ftype, second: Ftype) -> result<Ftype> {
             Ok(match self.operator {
                 '+' => first + second,
                 '-' => first - second,
@@ -103,38 +103,35 @@ pub mod math_parser {
             Some(Self(
                 inp,
                 match inp {
-                    "sin" | "cos" | "tan" => 1,
+                    "sin" | "cos" | "tan" | "sqrt" => 1,
                     "log" => 2,
                     _ => return None,
                 },
             ))
         }
 
-        fn solve(&self, first: Ftype, second: Ftype) -> math_parser_result<Ftype> {
+        fn solve(&self, first: Ftype, second: Ftype) -> result<Ftype> {
             Ok(match self.0 {
                 "sin" => first.sin(),
                 "cos" => first.cos(),
                 "tan" => first.tan(),
                 "log" => first.log(second),
+                "sqrt" => first.sqrt(),
                 _ => return Err(invalid_function),
             })
         }
     }
 
-    pub struct math_parser;
+    pub fn parse(notation: &str) -> result<(Ftype, stack<String>)> {
+        let itop = infix_to_postfix.parse(notation)?;
 
-    impl math_parser {
-        pub fn parse(notation: &str) -> math_parser_result<(Ftype, stack<String>)> {
-            let itop = infix_to_postfix.parse(notation)?;
+        let mut dbg = stack::new();
 
-            let mut dbg = stack::new();
+        let ptor = postfix_to_result.parse(&itop, &mut Some(&mut dbg))?;
 
-            let ptor = postfix_to_result.parse(&itop, &mut Some(&mut dbg))?;
-
-            match ptor.parse::<Ftype>() {
-                Ok(out) => Ok((out, dbg)),
-                Err(_) => Err(invalid_notation),
-            }
+        match ptor.parse::<Ftype>() {
+            Ok(out) => Ok((out, dbg)),
+            Err(_) => Err(invalid_notation),
         }
     }
 
@@ -144,14 +141,14 @@ pub mod math_parser {
     impl infix_to_postfix {
         fn handle_token(
             &self,
-            opstack: &mut stack<math_operator>,
+            opstack: &mut stack<operator>,
             outqueue: &mut deque<char>,
             token: char,
         ) {
             if token.is_digit(BASE) || token == ',' || token == '.' {
                 // is base-10 number
                 outqueue.push_back(token);
-            } else if let Some(operator) = math_operator::new(token) {
+            } else if let Some(operator) = operator::new(token) {
                 // is valid operator ( functions not implemented )
                 // https://github.com/rust-lang/rust/issues/53667
                 while matches!(opstack.last(), Some(last_operator) if
@@ -206,7 +203,7 @@ pub mod math_parser {
                 }
             } else if token.is_alphabetic() || token == '!' {
                 //is function
-                opstack.push(math_operator {
+                opstack.push(operator {
                     operator: token,
                     precedence: 4,
                     associativity: assoc::right,
@@ -216,9 +213,9 @@ pub mod math_parser {
 
         fn clean_stack(
             &self,
-            opstack: &mut stack<math_operator>,
+            opstack: &mut stack<operator>,
             outqueue: &mut deque<char>,
-        ) -> math_parser_result<()> {
+        ) -> result<()> {
             while !opstack.is_empty() {
                 let popd = opstack.pop().unwrap();
 
@@ -238,8 +235,8 @@ pub mod math_parser {
             Ok(())
         }
 
-        pub fn parse(&self, input_str: &str) -> math_parser_result<String> {
-            let mut operator_stack: stack<math_operator> = stack::new();
+        pub fn parse(&self, input_str: &str) -> result<String> {
+            let mut operator_stack: stack<operator> = stack::new();
 
             let mut output_queue: deque<char> = deque::new();
 
@@ -258,7 +255,7 @@ pub mod math_parser {
             self.to_string(&output_queue)
         }
 
-        fn to_string(&self, outqueue: &deque<char>) -> math_parser_result<String> {
+        fn to_string(&self, outqueue: &deque<char>) -> result<String> {
             let outstr: String = outqueue.iter().collect();
 
             if outstr.contains("  ") {
@@ -269,14 +266,14 @@ pub mod math_parser {
             Ok(outstr)
         }
 
-        fn unary_handle(&self, chrs: &mut stack<char>) -> math_parser_result<()> {
+        fn unary_handle(&self, chrs: &mut stack<char>) -> result<()> {
             for i in 0..chrs.len() {
                 let (left, right) = chrs.split_at_mut(i);
                 //splits the array [1,+,1] (i = 1) => ([1], [+,1])
 
                 let token = *right.first().unwrap(); //chrs[i]
 
-                if matches!(math_operator::new(token), Some(tok_as_op) if tok_as_op.is_real_op()) &&
+                if matches!(operator::new(token), Some(tok_as_op) if tok_as_op.is_real_op()) &&
                     matches!(right.get(1), Some(nxt) if nxt.is_digit(BASE)) && // (2+1)-(2+1), if the next char isnt a digit, it doesnt make sense, PS : 0 is i, so 1 is i+1
                     matches!(if i == 0 { right.first() } else { left.last() }, Some(bhd) // the entire check is ignored in case i is 0
                     if *bhd != ')' // (2+1)-4, the minus in this case would be considered unary without this check
@@ -303,13 +300,13 @@ pub mod math_parser {
             outstack: &mut stack<String>,
             token: String,
             dbg: Option<&mut stack<String>>,
-        ) -> math_parser_result<()> {
+        ) -> result<()> {
             if token.parse::<Ftype>().is_ok() || token.contains(',') {
                 outstack.push(token);
-            } else if let Some(operator) = math_operator::new(token.chars().next().unwrap()) {
+            } else if let Some(operator) = operator::new(token.chars().next().unwrap()) {
                 let mut arg1 = Ftype::NAN;
 
-                let pop_num_or = |err, stack: &mut stack<String>| -> math_parser_result<Ftype> {
+                let pop_num_or = |err, stack: &mut stack<String>| -> result<Ftype> {
                     match stack.pop() {
                         Some(out) => Ok(out.parse::<Ftype>().map_err(|_| err)?),
                         None => Err(err),
@@ -354,7 +351,7 @@ pub mod math_parser {
             outstack: &mut stack<String>,
             token: String,
             dbg: Option<&mut stack<String>>,
-        ) -> math_parser_result<()> {
+        ) -> result<()> {
             outstack.push(" ".to_owned()); //pushes a &str space to separate args
 
             if !token.contains('!') || token.ends_with('!') {
@@ -363,18 +360,17 @@ pub mod math_parser {
             }
 
             fn next_or<'a>(
-                err: math_parser_errors,
+                err: errors,
                 iter: &mut dyn Iterator<Item = &'a str>,
-            ) -> math_parser_result<&'a str> {
+            ) -> result<&'a str> {
                 match iter.next() {
                     Some(out) => Ok(out),
                     None => Err(err),
                 } //gets next val or returns err
             }
 
-            let as_ftype_or = |err, item: &str| -> math_parser_result<Ftype> {
-                Ok(item.parse::<Ftype>().map_err(|_| err)?)
-            }; // parses to ftype
+            let as_ftype_or =
+                |err, item: &str| -> result<Ftype> { item.parse::<Ftype>().map_err(|_| err) }; // parses to ftype
 
             //ex input : 10,10!gol
             //func input : 10,10
@@ -391,9 +387,9 @@ pub mod math_parser {
                 None => return Err(invalid_function),
             }; // the math func ( log )
 
-            let func_args = next_or(invalid_function, &mut token.split("!"))?; //the args ( 10,10 )
+            let func_args = next_or(invalid_function, &mut token.split('!'))?; //the args ( 10,10 )
 
-            let mut func_args = func_args.split(","); //[10, 10]
+            let mut func_args = func_args.split(','); //[10, 10]
 
             let arg1 = as_ftype_or(invalid_notation, next_or(invalid_function, &mut func_args)?)?;
 
@@ -419,26 +415,24 @@ pub mod math_parser {
             &self,
             input_str: &str,
             dbg: &mut Option<&mut stack<String>>,
-        ) -> math_parser_result<String> {
+        ) -> result<String> {
             let mut output_stack: stack<String> = stack::new();
 
             input_str
                 .split_whitespace() //split with whitespaces
-                .map(
+                .try_for_each(
                     |str| {
                         self.handle_function(&mut output_stack, str.to_owned(), dbg.as_deref_mut())
                     }, //handles func tokens
-                )
-                .collect::<math_parser_result<()>>()?; //fail with collect
+                )?;
 
             let input_str = output_stack.into_iter().collect::<String>();
 
             output_stack = stack::new(); //new opstack for token handling
 
-            input_str
-                .split_whitespace()
-                .map(|str| self.handle_token(&mut output_stack, str.to_owned(), dbg.as_deref_mut()))
-                .collect::<math_parser_result<()>>()?;
+            input_str.split_whitespace().try_for_each(|str| {
+                self.handle_token(&mut output_stack, str.to_owned(), dbg.as_deref_mut())
+            })?;
 
             Ok(output_stack.join("")) //stack<String> to String
         }

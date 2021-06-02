@@ -1,4 +1,4 @@
-use mp::math_parser::*;
+use mp::math_parser;
 
 use clap::{crate_version, App, Arg};
 
@@ -6,7 +6,7 @@ use std::io::{self, BufRead};
 
 use std::fs;
 
-fn main() -> math_parser_result<()> {
+fn main() -> math_parser::result<()> {
     let matches = App::new("cli-calculator")
         .version(crate_version!())
         .author("FinGu")
@@ -35,7 +35,7 @@ fn main() -> math_parser_result<()> {
 
     let dbg = matches.is_present("debug");
 
-    let parse_pln_panic = |input: Option<String>| -> math_parser_result<()> {
+    let parse_pln_panic = |input: Option<String>| -> math_parser::result<()> {
         let (result, dbgres) = match math_parser::parse(&input.expect("Invalid args")) {
             Ok(val) => val,
             Err(err) => return Err(err),
